@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Férias do Time 🏝️</title>
+    <!-- Carrega Tailwind CSS para estilização moderna e responsiva -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configuração da fonte Inter -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            /* Fundo suave, cor de areia clara */
+            background-color: #f7f9f9; 
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            gap: 2px;
+        }
+        .day-cell {
+            padding: 4px;
+            font-size: 0.75rem;
+            height: 3.5rem; /* Altura fixa para celular */
+            min-width: 25px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            text-align: center;
+            border-radius: 0.375rem; /* rounded-md */
+            box-shadow: inset 0 0 1px rgba(0,0,0,0.05); /* Sombra suave interna */
+        }
+        @media (min-width: 640px) {
+             .day-cell {
+                height: 5rem; /* Altura maior para desktop */
+             }
+        }
+        .vacation-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-top: 2px;
+            box-shadow: 0 0 3px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+
+    <div id="app" class="max-w-6xl mx-auto bg-white shadow-2xl rounded-xl p-4 sm:p-8 border border-gray-100">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-2 flex items-center">
+            Gestão de Férias do Time 
+            <span class="ml-3 text-teal-600 text-2xl" title="Estética de Férias">☀️</span>
+        </h1>
+        
+        <!-- Tabs de Navegação -->
+        <div class="flex border-b border-gray-200 mb-6">
+            <button id="tab-control" onclick="showTab('control')" class="py-2 px-4 text-sm sm:text-base font-medium transition-all duration-300 rounded-t-lg" data-tab="active">
+                Controle de Férias
+            </button>
+            <!-- Alterado de text-indigo-600 para text-teal-600 e hover -->
+            <button id="tab-calendar" onclick="showTab('calendar')" class="py-2 px-4 text-sm sm:text-base font-medium text-gray-500 hover:text-teal-600 transition-all duration-300 rounded-t-lg" data-tab="inactive">
+                Visualização Calendário
+            </button>
+        </div>
+
+        <!-- Conteúdo da Aba 1: Controle de Férias -->
+        <div id="content-control" class="tab-content">
+            <div id="auth-info" class="mb-4 text-xs text-gray-600"></div>
+            <div id="loading" class="text-center p-8 text-teal-600 font-medium">Carregando dados e autenticando...</div>
+            <div id="error-message" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4"></div>
+
+            <!-- Formulário de Adição -->
+            <!-- Alterado de bg-indigo-50 para bg-teal-50 -->
+            <form id="add-vacation-form" class="hidden grid grid-cols-1 md:grid-cols-5 gap-4 mb-8 p-4 bg-teal-50 rounded-lg shadow-inner border border-teal-200">
+                <div class="md:col-span-1">
+                    <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Colaborador</label>
+                    <!-- Alterado de focus:ring-indigo-500 para focus:ring-teal-500 -->
+                    <select id="name" required class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-teal-500 focus:border-teal-500"></select>
+                </div>
+                <div class="md:col-span-1">
+                    <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">Início (YYYY-MM-DD)</label>
+                    <!-- Alterado de focus:ring-indigo-500 para focus:ring-teal-500 -->
+                    <input type="date" id="start_date" required class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-teal-500 focus:border-teal-500">
+                </div>
+                <div class="md:col-span-1">
+                    <label for="end_date" class="block text-sm font-medium text-gray-700 mb-1">Fim (YYYY-MM-DD)</label>
+                    <!-- Alterado de focus:ring-indigo-500 para focus:ring-teal-500 -->
+                    <input type="date" id="end_date" required class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-teal-500 focus:border-teal-500">
+                </div>
+                <div class="md:col-span-2 flex items-end">
+                    <!-- Alterado de bg-indigo-600/700 para bg-teal-600/700 -->
+                    <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-all duration-200 transform hover:scale-[1.02] hover:shadow-lg">
+                        Adicionar Férias
+                    </button>
+                </div>
+            </form>
+
+            <!-- Tabela de Férias Cadastradas -->
+            <h2 class="text-xl font-semibold text-gray-700 mt-6 mb-4 hidden" id="vacations-title">Férias Registradas</h2>
+            <div class="overflow-x-auto">
+                <table id="vacations-table" class="hidden min-w-full divide-y divide-gray-200 rounded-lg overflow-hidden border border-gray-200">
+                    <thead class="bg-teal-100">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Colaborador</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Início</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Fim</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vacations-list" class="bg-white divide-y divide-gray-200">
+                        <!-- Linhas de férias serão inseridas aqui pelo JS -->
+                    </tbody>
+                </table>
+            </div>
+            <p id="no-vacations" class="hidden text-gray-500 italic mt-4 p-4 border rounded-lg bg-gray-50">Nenhuma férias registrada ainda. Adicione uma acima! </p>
+        </div>
+        
+        <!-- Conteúdo da Aba 2: Visualização Calendário -->
+        <div id="content-calendar" class="tab-content hidden">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4">Mapa de Férias Anual</h2>
+            
+            <div id="year-selector" class="flex justify-between items-center mb-6">
+                <button onclick="changeYear(-1)" class="p-2 bg-gray-200 rounded-full hover:bg-teal-300 transition-all duration-200 transform hover:scale-105">
+                    <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                </button>
+                <!-- Alterado de text-indigo-600 para text-teal-600 -->
+                <span id="current-year" class="text-xl font-bold text-teal-600"></span>
+                <button onclick="changeYear(1)" class="p-2 bg-gray-200 rounded-full hover:bg-teal-300 transition-all duration-200 transform hover:scale-105">
+                    <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                </button>
+            </div>
+
+            <!-- Legenda das Cores -->
+            <div id="legend" class="mb-6 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                <!-- Legenda será preenchida por JS -->
+            </div>
+
+            <!-- Contêiner do Calendário Mensal -->
+            <div id="calendar-view" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Meses serão inseridos aqui pelo JS -->
+            </div>
+        </div>
+
+        <!-- Custom Modal para Confirmação -->
+        <div id="custom-modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-lg shadow-2xl p-6 w-full max-w-sm">
+                <h3 id="modal-title" class="text-xl font-bold mb-4 text-gray-800">Confirmar Exclusão</h3>
+                <p id="modal-body" class="mb-6 text-gray-600">Tem certeza que deseja remover esta entrada de férias?</p>
+                <div class="flex justify-end space-x-3">
+                    <button id="modal-cancel" class="py-2 px-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+                        Cancelar
+                    </button>
+                    <button id="modal-confirm" class="py-2 px-4 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                        Excluir
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Scripts do Firebase e Lógica do Aplicativo -->
+    <script type="module">
+        // Importa as funções necessárias do Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, collection, onSnapshot, addDoc, deleteDoc, query, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Ativa o log de debug do Firestore
+        setLogLevel('Debug');
+
+        // Variáveis globais de ambiente (fornecidas pelo Canvas)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Variáveis de estado do Firebase
+        let app, db, auth, userId = null;
+        let isAuthReady = false;
+
+        // Lista de colaboradores e cores de identificação (necessário para o calendário)
+        const TEAM_MEMBERS = ['Erick', 'Lívia', 'Iza', 'Lídya', 'Luana', 'Laris', 'Hemilly', 'Angélica'];
+        const MEMBER_COLORS = {
+            // Mantidas cores fortes para contraste no calendário
+            'Erick': 'bg-red-500', 'Lívia': 'bg-blue-500', 'Iza': 'bg-green-500', 
+            'Lídya': 'bg-yellow-500', 'Luana': 'bg-purple-500', 'Laris': 'bg-pink-500', 
+            'Hemilly': 'bg-teal-500', 'Angélica': 'bg-orange-500' // Teal e Orange para harmonizar com o tema
+        };
+        
+        let vacations = [];
+        let currentCalendarYear = new Date().getFullYear();
+
+        // Elementos DOM
+        const loadingEl = document.getElementById('loading');
+        const errorMessageEl = document.getElementById('error-message');
+        const formEl = document.getElementById('add-vacation-form');
+        const nameSelectEl = document.getElementById('name');
+        const vacationsListEl = document.getElementById('vacations-list');
+        const calendarViewEl = document.getElementById('calendar-view');
+        const currentYearEl = document.getElementById('current-year');
+        const legendEl = document.getElementById('legend');
+        const authInfoEl = document.getElementById('auth-info');
+        const noVacationsEl = document.getElementById('no-vacations');
+        const vacationsTableEl = document.getElementById('vacations-table');
+        const vacationsTitleEl = document.getElementById('vacations-title');
+
+
+        // --- Funções Auxiliares de UI ---
+
+        /**
+         * Alterna a visualização entre as abas 'control' e 'calendar'.
+         * @param {string} tabId - 'control' ou 'calendar'.
+         */
+        window.showTab = (tabId) => {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`content-${tabId}`).classList.remove('hidden');
+
+            document.querySelectorAll('[data-tab]').forEach(btn => {
+                // Alterado de text-indigo-600/border-indigo-600 para text-teal-600/border-teal-600
+                if (btn.id === `tab-${tabId}`) {
+                    btn.dataset.tab = 'active';
+                    btn.classList.add('text-teal-600', 'border-b-2', 'border-teal-600');
+                    btn.classList.remove('text-gray-500', 'hover:text-teal-600');
+                } else {
+                    btn.dataset.tab = 'inactive';
+                    btn.classList.remove('text-teal-600', 'border-b-2', 'border-teal-600');
+                    btn.classList.add('text-gray-500', 'hover:text-teal-600');
+                }
+            });
+
+            if (tabId === 'calendar' && isAuthReady) {
+                renderCalendar();
+            }
+        };
+
+        /**
+         * Cria e preenche o dropdown de nomes na aba de controle.
+         */
+        const populateNameSelect = () => {
+            nameSelectEl.innerHTML = '<option value="" disabled selected>Selecione um colaborador</option>';
+            TEAM_MEMBERS.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                nameSelectEl.appendChild(option);
+            });
+        };
+
+        /**
+         * Renderiza a lista de férias na aba de controle.
+         */
+        const renderVacationsList = () => {
+            vacationsListEl.innerHTML = '';
+            
+            if (vacations.length === 0) {
+                vacationsTableEl.classList.add('hidden');
+                vacationsTitleEl.classList.add('hidden');
+                noVacationsEl.classList.remove('hidden');
+                return;
+            }
+
+            noVacationsEl.classList.add('hidden');
+            vacationsTableEl.classList.remove('hidden');
+            vacationsTitleEl.classList.remove('hidden');
+
+            vacations.sort((a, b) => new Date(a.start) - new Date(b.start)).forEach(vacation => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50 transition-colors';
+                
+                // Formatação da data para exibição
+                const formatDisplayDate = (dateString) => {
+                    const [year, month, day] = dateString.split('-');
+                    return `${day}/${month}/${year}`;
+                };
+
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <div class="flex items-center">
+                            <span class="${MEMBER_COLORS[vacation.name] || 'bg-gray-500'} w-3 h-3 rounded-full mr-2"></span>
+                            ${vacation.name}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formatDisplayDate(vacation.start)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formatDisplayDate(vacation.end)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button data-id="${vacation.id}" class="delete-btn text-red-600 hover:text-red-900 transition-colors transform hover:scale-105" title="Remover">
+                            <svg class="w-5 h-5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </td>
+                `;
+                vacationsListEl.appendChild(row);
+            });
+
+            // Adiciona listener para botões de exclusão
+            document.querySelectorAll('.delete-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const docId = e.currentTarget.dataset.id;
+                    showDeleteModal(docId);
+                });
+            });
+        };
+        
+        /**
+         * Renderiza o calendário completo para o ano atual.
+         */
+        const renderCalendar = () => {
+            // Alterado de text-indigo-600 para text-teal-600
+            currentYearEl.textContent = currentCalendarYear;
+            calendarViewEl.innerHTML = '';
+            
+            // Renderiza a legenda
+            legendEl.innerHTML = '<span class="text-gray-500 font-medium mr-2">Legenda:</span>';
+            Object.entries(MEMBER_COLORS).forEach(([name, colorClass]) => {
+                legendEl.innerHTML += `
+                    <div class="flex items-center">
+                        <span class="${colorClass} w-3 h-3 rounded-full mr-1"></span>
+                        <span class="text-gray-700">${name}</span>
+                    </div>
+                `;
+            });
+
+            const monthNames = [
+                'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+            ];
+
+            for (let month = 0; month < 12; month++) {
+                const monthDiv = document.createElement('div');
+                monthDiv.className = 'bg-gray-100 p-3 rounded-lg shadow-md';
+                
+                const firstDayOfMonth = new Date(currentCalendarYear, month, 1);
+                const daysInMonth = new Date(currentCalendarYear, month + 1, 0).getDate();
+                const startDayOfWeek = firstDayOfMonth.getDay(); // 0=Dom, 6=Sáb
+
+                let monthHTML = `
+                    <!-- Alterado de text-indigo-700 para text-teal-700 -->
+                    <h3 class="text-lg font-semibold text-center text-teal-700 mb-2">${monthNames[month]} ${currentCalendarYear}</h3>
+                    <div class="calendar-grid text-xs font-medium text-gray-500 mb-1">
+                        <span class="text-center">Dom</span><span class="text-center">Seg</span><span class="text-center">Ter</span><span class="text-center">Qua</span>
+                        <span class="text-center">Qui</span><span class="text-center">Sex</span><span class="text-center">Sáb</span>
+                    </div>
+                    <div class="calendar-grid">
+                `;
+
+                // Espaços vazios para o início do mês
+                for (let i = 0; i < startDayOfWeek; i++) {
+                    monthHTML += `<div class="day-cell bg-gray-50"></div>`;
+                }
+
+                // Dias do mês
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const date = new Date(currentCalendarYear, month, day);
+                    const isoDate = `${currentCalendarYear}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    
+                    const vacationsToday = vacations.filter(v => {
+                        return isoDate >= v.start && isoDate <= v.end;
+                    });
+                    
+                    // Aplica cores e classes
+                    // Alterado de hover:bg-indigo-100 para hover:bg-teal-100
+                    let cellClasses = 'bg-white hover:bg-teal-100 transition-colors cursor-default border border-gray-200';
+                    if (date.getDay() === 0 || date.getDay() === 6) {
+                        cellClasses = 'bg-gray-100 text-gray-400 border border-gray-200'; // Fim de semana
+                    }
+                    if (vacationsToday.length > 0) {
+                        // Se houver férias, a célula é marcada
+                        // Alterado de border-indigo-300 para border-teal-300
+                        cellClasses = 'bg-white border-2 border-teal-300 shadow-lg shadow-teal-100/50';
+                    }
+
+                    // Renderiza os pontos coloridos
+                    const dots = vacationsToday.map(v => 
+                        `<div class="vacation-dot ${MEMBER_COLORS[v.name] || 'bg-gray-500'}" title="${v.name}"></div>`
+                    ).join('');
+
+
+                    monthHTML += `
+                        <div class="day-cell ${cellClasses}">
+                            <span class="text-sm font-bold text-gray-800">${day}</span>
+                            <div class="flex flex-wrap justify-center gap-1 mt-1">
+                                ${dots}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                monthHTML += `</div>`;
+                monthDiv.innerHTML = monthHTML;
+                calendarViewEl.appendChild(monthDiv);
+            }
+        };
+
+        /**
+         * Altera o ano exibido no calendário e renderiza novamente.
+         * @param {number} delta - 1 para avançar, -1 para retroceder.
+         */
+        window.changeYear = (delta) => {
+            currentCalendarYear += delta;
+            renderCalendar();
+        };
+
+        /**
+         * Exibe o modal de confirmação para exclusão.
+         * @param {string} docId - ID do documento a ser excluído.
+         */
+        const showDeleteModal = (docId) => {
+            const modal = document.getElementById('custom-modal');
+            const confirmBtn = document.getElementById('modal-confirm');
+            const cancelBtn = document.getElementById('modal-cancel');
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            const confirmListener = () => {
+                deleteVacation(docId);
+                closeModal();
+            };
+
+            const closeModal = () => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                confirmBtn.removeEventListener('click', confirmListener);
+                cancelBtn.removeEventListener('click', closeModal);
+            };
+
+            confirmBtn.addEventListener('click', confirmListener);
+            cancelBtn.addEventListener('click', closeModal);
+        };
+
+        // --- Funções de Persistência (Firebase Firestore) ---
+
+        /**
+         * Adiciona uma nova entrada de férias ao Firestore.
+         * @param {Event} e - Evento de submissão do formulário.
+         */
+        const addVacation = async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('name').value;
+            const start = document.getElementById('start_date').value;
+            const end = document.getElementById('end_date').value;
+
+            if (!name || !start || !end) return;
+            if (new Date(start) > new Date(end)) {
+                showAppMessage("A data de início não pode ser posterior à data de fim.", 'error');
+                return;
+            }
+
+            try {
+                const vacationsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'vacations');
+                await addDoc(vacationsCollection, {
+                    name: name,
+                    start: start, // YYYY-MM-DD
+                    end: end,     // YYYY-MM-DD
+                    createdAt: new Date().toISOString(),
+                    userId: userId // Quem registrou
+                });
+                formEl.reset();
+                showAppMessage(`Férias de ${name} adicionadas com sucesso!`, 'success');
+            } catch (error) {
+                console.error("Erro ao adicionar documento: ", error);
+                showAppMessage("Falha ao adicionar férias. Tente novamente.", 'error');
+            }
+        };
+
+        /**
+         * Remove uma entrada de férias do Firestore.
+         * @param {string} docId - ID do documento a ser excluído.
+         */
+        const deleteVacation = async (docId) => {
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'vacations', docId);
+                await deleteDoc(docRef);
+                showAppMessage("Férias removidas com sucesso.", 'success');
+            } catch (error) {
+                console.error("Erro ao remover documento: ", error);
+                showAppMessage("Falha ao remover férias. Tente novamente.", 'error');
+            }
+        };
+
+        /**
+         * Inicia o listener de tempo real do Firestore.
+         */
+        const setupFirestoreListener = () => {
+            if (!db || !isAuthReady) return;
+
+            const vacationsQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'vacations'));
+
+            onSnapshot(vacationsQuery, (snapshot) => {
+                vacations = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                
+                // Força a atualização de ambas as abas
+                renderVacationsList();
+                // Apenas renderiza o calendário se estiver na aba
+                if (document.getElementById('content-calendar').classList.contains('hidden') === false) {
+                    renderCalendar();
+                }
+                
+            }, (error) => {
+                console.error("Erro ao ouvir updates do Firestore:", error);
+                showAppMessage("Erro ao sincronizar dados em tempo real.", 'error');
+            });
+        };
+
+        /**
+         * Função de mensagens rápidas de sucesso/erro na UI.
+         * @param {string} message - A mensagem a ser exibida.
+         * @param {string} type - 'success' ou 'error'.
+         */
+        const showAppMessage = (message, type) => {
+            const tempMessageEl = document.createElement('div');
+            // Alterado de bg-green-600 para bg-teal-600 (sucesso)
+            tempMessageEl.className = `fixed bottom-4 right-4 p-4 rounded-lg shadow-xl text-white font-medium z-50 transition-transform duration-300 transform translate-y-full ${type === 'error' ? 'bg-red-600' : 'bg-teal-600'}`;
+            tempMessageEl.textContent = message;
+            document.body.appendChild(tempMessageEl);
+
+            // Animação de entrada
+            setTimeout(() => {
+                tempMessageEl.style.transform = 'translate-y-0';
+            }, 10); 
+
+            // Animação de saída
+            setTimeout(() => {
+                tempMessageEl.style.transform = 'translate-y-full';
+                tempMessageEl.style.opacity = '0';
+                setTimeout(() => tempMessageEl.remove(), 300);
+            }, 4000);
+        };
+
+
+        // --- Inicialização e Autenticação ---
+
+        const initializeAppAndAuth = async () => {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Listener de mudança de estado de autenticação
+                onAuthStateChanged(auth, (user) => {
+                    loadingEl.classList.add('hidden');
+                    formEl.classList.remove('hidden');
+                    
+                    if (user) {
+                        userId = user.uid;
+                        isAuthReady = true;
+                        authInfoEl.textContent = `Usuário autenticado (ID: ${userId}). Os dados são compartilhados publicamente com o time.`;
+                        setupFirestoreListener(); // Inicia o listener de dados
+                    } else {
+                        // Deve ser tratada a reautenticação se houver necessidade
+                        userId = null;
+                        isAuthReady = true; // Mesmo não autenticado, a flag fica pronta para evitar loop
+                        authInfoEl.textContent = `Aguardando autenticação...`;
+                    }
+                });
+
+                // Tenta autenticar usando o token personalizado ou anonimamente
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+            } catch (error) {
+                console.error("Falha na inicialização do Firebase ou autenticação:", error);
+                loadingEl.classList.add('hidden');
+                errorMessageEl.classList.remove('hidden');
+                errorMessageEl.textContent = `Erro Crítico: Falha ao carregar o serviço de dados. Detalhes: ${error.message}`;
+            }
+        };
+
+        // --- Event Listeners e Início ---
+
+        window.onload = () => {
+            populateNameSelect();
+            formEl.addEventListener('submit', addVacation);
+            
+            // Inicializa Firebase e autenticação
+            initializeAppAndAuth();
+            
+            // Define o ano do calendário para o ano inicial (2026, conforme pedido)
+            currentCalendarYear = 2026; 
+            
+            // Renderiza o calendário uma vez ao carregar (se estiver na aba)
+            if (document.getElementById('content-calendar').classList.contains('hidden') === false) {
+                 renderCalendar();
+            }
+            
+            // Garante que o estado inicial da tab é o controle
+            showTab('control');
+        };
+
+    </script>
+</body>
+</html>
