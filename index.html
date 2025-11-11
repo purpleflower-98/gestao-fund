@@ -166,35 +166,48 @@
     <script type="module">
         // Importa as funções necessárias do Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, collection, onSnapshot, addDoc, deleteDoc, query, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         // Ativa o log de debug do Firestore
         setLogLevel('Debug');
 
-        // Variáveis globais de ambiente (fornecidas pelo Canvas)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        // --- CORREÇÃO DO ERRO 'projectId' NOT PROVIDED ---
-        let firebaseConfig = {};
-        try {
-            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                // Tenta fazer o parse da configuração fornecida pelo ambiente
-                firebaseConfig = JSON.parse(__firebase_config);
-            }
-        } catch (e) {
-            console.error("Erro ao fazer parse da __firebase_config, usando fallback:", e);
-        }
+        // ====================================================================
+        // --- CHAVES DE CONFIGURAÇÃO DO FIREBASE INSERIDAS PELO USUÁRIO ---
+        // ====================================================================
+        const firebaseConfig = {
+          apiKey: "AIzaSyACuvBkqeNodqASIcz5biPjPgbK__wRe5E",
+          authDomain: "ferias-fund-bd.firebaseapp.com",
+          projectId: "ferias-fund-bd",
+          storageBucket: "ferias-fund-bd.firebasestorage.app",
+          messagingSenderId: "644017985649",
+          appId: "1:644017985649:web:bd19775cb14722953323d0",
+          measurementId: "G-H40VGDYXR2" // Measurement ID é opcional e não afeta o app principal
+        };
+        // ====================================================================
+        // --- FIM DO BLOCO DE CONFIGURAÇÃO ---
+        // ====================================================================
         
-        // Se a configuração estiver incompleta (ou o parse falhou) e faltar o projectId,
-        // garantimos um fallback mínimo para que initializeApp não quebre.
-        if (!firebaseConfig || !firebaseConfig.projectId) {
-            console.warn("Configuração do Firebase incompleta. Usando configuração de fallback.");
-            firebaseConfig = { projectId: "default-project-id" }; // O mínimo para initializeApp
-        }
-        // --------------------------------------------------
-
+        /* * 🚨 ATENÇÃO: ERRO DE PERMISSÃO ('Missing or insufficient permissions')
+         * * Este erro indica que as regras de segurança do seu Firestore estão impedindo 
+         * que usuários (mesmo anônimos) leiam ou escrevam dados no caminho:
+         * /artifacts/{projectId}/public/data/vacations
+         * * SOLUÇÃO: Você DEVE atualizar as Regras de Segurança no Console do Firebase.
+         * 1. Vá para o Console do Firebase -> Firestore Database -> Regras.
+         * 2. Publique a seguinte regra para permitir leitura e escrita por qualquer usuário autenticado (incluindo o anônimo que usamos):
+         * * rules_version = '2';
+         * service cloud.firestore {
+         * match /databases/{database}/documents {
+         * match /artifacts/{appId}/public/data/{document=**} {
+         * allow read, write: if request.auth != null;
+         * }
+         * }
+         * }
+        */
+        
+        // O App ID agora é o projectId (para o path de dados públicos no Firestore)
+        const appId = firebaseConfig.projectId; 
+        
         // Variáveis de estado do Firebase
         let app, db, auth, userId = null;
         let isAuthReady = false;
@@ -468,6 +481,7 @@
             }
 
             try {
+                // O path é baseado no projectId para ser único
                 const vacationsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'vacations');
                 await addDoc(vacationsCollection, {
                     name: name,
@@ -480,7 +494,8 @@
                 showAppMessage(`Férias de ${name} adicionadas com sucesso!`, 'success');
             } catch (error) {
                 console.error("Erro ao adicionar documento: ", error);
-                showAppMessage("Falha ao adicionar férias. Tente novamente.", 'error');
+                // Inclui uma menção à causa provável (Permissões)
+                showAppMessage(`Falha ao adicionar férias. Verifique suas Permissões do Firebase. Detalhe: ${error.message}`, 'error');
             }
         };
 
@@ -490,12 +505,14 @@
          */
         const deleteVacation = async (docId) => {
             try {
+                // O path é baseado no projectId para ser único
                 const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'vacations', docId);
                 await deleteDoc(docRef);
                 showAppMessage("Férias removidas com sucesso.", 'success');
             } catch (error) {
                 console.error("Erro ao remover documento: ", error);
-                showAppMessage("Falha ao remover férias. Tente novamente.", 'error');
+                // Inclui uma menção à causa provável (Permissões)
+                showAppMessage(`Falha ao remover férias. Verifique suas Permissões do Firebase. Detalhe: ${error.message}`, 'error');
             }
         };
 
@@ -505,6 +522,7 @@
         const setupFirestoreListener = () => {
             if (!db || !isAuthReady) return;
 
+            // O path é baseado no projectId para ser único
             const vacationsQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'vacations'));
 
             onSnapshot(vacationsQuery, (snapshot) => {
@@ -522,7 +540,8 @@
                 
             }, (error) => {
                 console.error("Erro ao ouvir updates do Firestore:", error);
-                showAppMessage("Erro ao sincronizar dados em tempo real.", 'error');
+                // Melhorando a mensagem para refletir a causa provável
+                showAppMessage(`Erro ao sincronizar dados. Verifique as Regras de Permissão do Firebase (Erro: ${error.message})`, 'error');
             });
         };
 
@@ -555,42 +574,40 @@
         // --- Inicialização e Autenticação ---
 
         const initializeAppAndAuth = async () => {
+            
+            // 🚨 VERIFICAÇÃO CRÍTICA: Se a apiKey não foi preenchida pelo usuário, o Firebase falhará.
+            if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "SEU_API_KEY_AQUI") {
+                 loadingEl.classList.add('hidden');
+                 errorMessageEl.classList.remove('hidden');
+                 errorMessageEl.textContent = `ERRO DE CONFIGURAÇÃO: Por favor, obtenha as chaves do seu projeto Firebase e cole-as no código HTML.`;
+                 return;
+            }
+
             try {
-                // Usa firebaseConfig que agora tem um fallback garantido
+                // Inicializa o Firebase com as chaves fornecidas
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
-                // Listener de mudança de estado de autenticação
-                onAuthStateChanged(auth, (user) => {
-                    loadingEl.classList.add('hidden');
-                    formEl.classList.remove('hidden');
-                    
-                    if (user) {
-                        userId = user.uid;
-                        isAuthReady = true;
-                        authInfoEl.textContent = `Usuário autenticado (ID: ${userId}). Os dados são compartilhados publicamente com o time.`;
-                        setupFirestoreListener(); // Inicia o listener de dados
-                    } else {
-                        // Deve ser tratada a reautenticação se houver necessidade
-                        userId = null;
-                        isAuthReady = true; // Mesmo não autenticado, a flag fica pronta para evitar loop
-                        authInfoEl.textContent = `Aguardando autenticação...`;
-                    }
-                });
+                // Inicia o login anônimo (necessário para o Firestore funcionar)
+                const userCredential = await signInAnonymously(auth);
+                const user = userCredential.user;
 
-                // Tenta autenticar usando o token personalizado ou anonimamente
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                // Após o login
+                userId = user.uid;
+                isAuthReady = true;
+                
+                loadingEl.classList.add('hidden');
+                formEl.classList.remove('hidden');
+
+                authInfoEl.textContent = `Usuário conectado anonimamente. ID: ${userId}. Os dados de férias são sincronizados em tempo real.`;
+                setupFirestoreListener(); // Inicia o listener de dados
 
             } catch (error) {
                 console.error("Falha na inicialização do Firebase ou autenticação:", error);
                 loadingEl.classList.add('hidden');
                 errorMessageEl.classList.remove('hidden');
-                errorMessageEl.textContent = `Erro Crítico: Falha ao carregar o serviço de dados. Detalhes: ${error.message}`;
+                errorMessageEl.textContent = `Erro Crítico ao conectar ao Firebase. Verifique se as chaves estão corretas e se a Autenticação (Anônima) e o Firestore estão habilitados. Detalhes: ${error.message}`;
             }
         };
 
@@ -606,12 +623,7 @@
             // Define o ano do calendário para o ano inicial (2026, conforme pedido)
             currentCalendarYear = 2026; 
             
-            // Renderiza o calendário uma vez ao carregar (se estiver na aba)
-            if (document.getElementById('content-calendar').classList.contains('hidden') === false) {
-                 renderCalendar();
-            }
-            
-            // Garante que o estado inicial da tab é o controle
+            // Garante que o estado inicial da tab é o controle e tenta renderizar o calendário se estiver visível
             showTab('control');
         };
 
